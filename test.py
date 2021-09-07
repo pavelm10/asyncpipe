@@ -54,9 +54,11 @@ class TaskD(TaskBase):
 
 class DummyPipeline(Pipeline):
 
-    def __init__(self, set_evt: bool = False, *args, **kwargs):
+    def __init__(self, set_evt: bool = False, fail_softly: bool = False, pass_soft_fail: bool = True, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.set_evt = set_evt
+        self.fail_softly = fail_softly
+        self.propagate_soft_failures = pass_soft_fail
 
     def define(self) -> List:
         all_tasks = []
@@ -67,10 +69,10 @@ class DummyPipeline(Pipeline):
         btask = TaskB(idx=2021)
         for idx in range(0, 10):
             ctask = TaskC(idx=idx, dependency=[btask])
-            problem_task = TaskTroubleMaker(evt=evt, idx=idx, dependency=[ctask])
+            problem_task = TaskTroubleMaker(evt=evt, idx=idx, dependency=[ctask], fail_softly=self.fail_softly)
             branching_stage_tasks.extend([problem_task, ctask])
 
-        dtask = TaskD(idx=42, dependency=branching_stage_tasks)
+        dtask = TaskD(idx=42, dependency=branching_stage_tasks, propagate_soft_failures=self.propagate_soft_failures)
         all_tasks.append(btask)
         all_tasks.extend(branching_stage_tasks)
         all_tasks.append(dtask)
@@ -90,11 +92,31 @@ def test_pipeline_rerun(tmp_path):
     pipe = DummyPipeline(set_evt=True, root_output_dir=tmp_path, workers=10)
     with pytest.raises(TasksFailedError):
         pipe.run()
-        files = list(tmp_path.rglob("*.json"))
-        assert len(files) == 1
+    files = list(tmp_path.rglob("*.json"))
+    assert len(files) == 11
 
     # then rerun the pipeline, but no task will fail. Only not done tasks will be processed
     pipe = DummyPipeline(root_output_dir=tmp_path, workers=10)
     pipe.run()
     files = list(tmp_path.rglob("*.json"))
+    assert len(files) == 22
+
+
+@pytest.mark.parametrize("pass_soft_fail", (True, False))
+def test_pipeline_rerun_with_soft_failures_and_propagating(tmp_path, pass_soft_fail):
+    # first run pipeline with a Task softly failing
+    pipe = DummyPipeline(set_evt=True, root_output_dir=tmp_path, workers=10,
+                         fail_softly=True, pass_soft_fail=pass_soft_fail)
+    pipe.run()
+    done_files = list(tmp_path.rglob("done.json"))
+    soft_fail_files = list(tmp_path.rglob("failed_softly.json"))
+    assert len(done_files) == 11 if pass_soft_fail else 12
+    assert len(soft_fail_files) == 11 if pass_soft_fail else 10
+    if pass_soft_fail:
+        assert pipe.task_results['TaskD_42'] == "FAILED SOFTLY"
+
+    # then rerun the pipeline, but no task will fail. Only not done and softly failed tasks will be processed
+    pipe = DummyPipeline(root_output_dir=tmp_path, workers=10)
+    pipe.run()
+    files = list(tmp_path.rglob("done.json"))
     assert len(files) == 22

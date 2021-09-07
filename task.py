@@ -15,17 +15,30 @@ class TaskState:
     FAILED = 'FAILED'
     DONE = 'DONE'
     FAILED_DEPENDENCY = "FAILED DEPENDENCY"
+    FAILED_SOFTLY = "FAILED SOFTLY"
 
 
 class Task(ABC):
     """Atomic unit of concurrent processing. Provides common functionality for derived subclasses"""
 
-    def __init__(self, dependency: List = None):
+    def __init__(self, dependency: List = None, fail_softly: bool = False, propagate_soft_failures: bool = True):
         """
         :param dependency: (optional, List) list of tasks which must be finished before this task can execute
+        :param fail_softly: (optional, bool) if set True and the task raises exception than the state will be
+            FAILED SOFTLY allowing downstream tasks to execute. It is useful when the pipeline contains many branches
+            which eventually merge into one aggregation final task. If there are some branches which failed softly
+            then the aggregation task can still execute and provide at least partial results.
+            propagate_soft_failures must be set False in order to execute the aggregation task, else it will
+            also finish FAILED SOFTLY. When a task fails softly it creates soft failure file flag instead of
+            regular output file flag.
+        :param propagate_soft_failures: (optional, bool) if set True and upstream task(s) failed softly, then this
+            task will not execute and will also create soft failure output flag hence propagating the soft failure
+            downstream. If set false, it will try to execute itself not propagating upstream soft failures downstream.
         """
         self.event = asyncio.Event()
         self.dependency = [] if dependency is None else dependency
+        self.fail_softly = fail_softly
+        self.propagate_soft_failures = propagate_soft_failures
         if not isinstance(self.dependency, list):
             self.dependency = [dependency]
 
@@ -48,6 +61,14 @@ class Task(ABC):
     def output(self) -> pathlib.Path:
         """output json file path of the done flag indicating the task is done, can be overridden by a subclass"""
         return self.output_dir / 'done.json'
+
+    @property
+    def soft_failure_output(self) -> pathlib.Path:
+        """
+        output json file path of the failed softly flag indicating the task failed softly,
+        can be overridden by a subclass
+        """
+        return self.output_dir / 'failed_softly.json'
 
     @property
     def semaphore(self) -> asyncio.Semaphore:
@@ -76,6 +97,18 @@ class Task(ABC):
         """
         return self.output.exists()
 
+    def failed_softly(self) -> bool:
+        """
+        if the task's failed softly file flag exists returns True, else False, can be overridden by a subclass
+        :return: (bool)
+        """
+        return self.soft_failure_output.exists()
+
+    def remove_soft_failure_flag(self) -> None:
+        """if soft failure flag exists, removes it"""
+        if self.failed_softly():
+            self.soft_failure_output.unlink()
+
     def output_data(self) -> Dict:
         """
         output dictionary that will be stored in the task's done flag, can be overridden/extended by a subclass
@@ -83,17 +116,29 @@ class Task(ABC):
         """
         return {"task_name": self.__class__.__name__}
 
+    async def create_soft_failure_output(self) -> None:
+        """
+        async method for creating task's soft failure flag, can be overridden by a subclass
+        :return:
+        """
+        await self._write_output(self.soft_failure_output)
+        self.log.info("soft failure output created")
+
     async def create_output(self) -> None:
         """
         async method for creating task's done flag, can be overridden by a subclass
         :return:
         """
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        data_str = json.dumps(self.output_data(), sort_keys=True)
-        async with aiofiles.open(self.output, 'w') as h:
-            await h.write(data_str)
+        await self._write_output(self.output)
+        self.log.info("output created")
 
-        self.log.info("output_created")
+    async def _write_output(self, out_path) -> None:
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        data = self.output_data()
+        data['state'] = self._state
+        data_str = json.dumps(data, sort_keys=True)
+        async with aiofiles.open(out_path, 'w') as h:
+            await h.write(data_str)
 
     @abstractmethod
     async def run_task(self) -> None:
@@ -111,21 +156,27 @@ class Task(ABC):
             self.log.info("executed")
         except BaseException as ex:
             self.log.exception(ex)
-            self._state = TaskState.FAILED
+            self._state = TaskState.FAILED_SOFTLY if self.fail_softly else TaskState.FAILED
+            if self._state == TaskState.FAILED_SOFTLY:
+                await self.create_soft_failure_output()
         finally:
             self.semaphore.release()
             self.log.info("semaphore released")
-            self.log.info("event set")
 
     def _dependencies_done(self):
         """checks if all dependencies are done, if yes then returns True, else False"""
         states = [d.done() for d in self.dependency]
         return all(states)
 
+    def _dependencies_failed_softly(self):
+        """checks if any dependency failed softly, if yes then returns True, else False"""
+        states = [d.failed_softly() for d in self.dependency]
+        return any(states)
+
     async def _wait_for_dependencies(self):
         """async method to wait for all dependencies that are not done to finish"""
         for d in self.dependency:
-            if not d.done():
+            if not d.done() and not d.failed_softly():
                 await d.event.wait()
 
     async def _handle_dependencies(self) -> bool:
@@ -136,12 +187,20 @@ class Task(ABC):
         else:
             self.log.info("dependencies not done, waiting...")
             await self._wait_for_dependencies()
-            self.log.info("dependencies finally are done, starting execution...")
-
-            if not self._dependencies_done():
+            if self._dependencies_failed_softly():
+                self.log.warning("At least one dependency failed softly")
+                ret = False if self.propagate_soft_failures else True
+                if not ret:
+                    self.log.warning("Propagating soft failures - soft failing as well")
+                    self._state = TaskState.FAILED_SOFTLY
+                    await self.create_soft_failure_output()
+            elif not self._dependencies_done():
                 self.log.error("Not all dependencies are done - skipping")
                 self._state = TaskState.FAILED_DEPENDENCY
                 ret = False
+            else:
+                self.log.info("dependencies finally are done, starting execution...")
+
         return ret
 
     async def execute(self) -> Tuple:
@@ -161,4 +220,5 @@ class Task(ABC):
             if run:
                 await self._execute()
         self.event.set()
+        self.log.info("event set")
         return self.name, self._state

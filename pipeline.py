@@ -17,16 +17,17 @@ class Pipeline(ABC):
         self.root_output_dir = root_output_dir
         self.workers = workers
         self.log = init_logger(self.__class__.__name__)
+        self.task_results = {}
 
     @abstractmethod
     def define(self) -> List:
         """main method for defining the pipeline structure, must be implemented by a subclass"""
         return []
 
-    def _handle_results(self, results: List):
+    def _handle_results(self) -> None:
         """prints tasks' results if there is any failed task will raise eventually TasksFailedError"""
         failed = False
-        for (t_name, t_state) in results:
+        for t_name, t_state in self.task_results.items():
             msg = f"{t_name}: {t_state}"
             if t_state == TaskState.FAILED:
                 failed = True
@@ -46,6 +47,7 @@ class Pipeline(ABC):
         for t in tasks:
             t.semaphore = semaphore
             t.root_out_dir = self.root_output_dir
+            t.remove_soft_failure_flag()
             tasks_complete.append(t.done())
         return tasks_complete
 
@@ -53,7 +55,6 @@ class Pipeline(ABC):
         """
         main async execution method which wraps pipeline definition, tasks' initialization and actual task triggering
         """
-        results = []
         semaphore = asyncio.Semaphore(self.workers)
         self.log.info(f"Semaphore initialized with {self.workers} workers")
 
@@ -69,10 +70,10 @@ class Pipeline(ABC):
         atasks = [asyncio.create_task(t.execute(), name=t.name) for t in tasks]
 
         for t in atasks:
-            res = await t
-            results.append(res)
+            name, state = await t
+            self.task_results[name] = state
 
-        self._handle_results(results)
+        self._handle_results()
 
     def run(self):
         """interface method to wrap calling of the execute method"""

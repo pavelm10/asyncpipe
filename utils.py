@@ -12,5 +12,6 @@ def init_logger(name: str) -> logging.Logger:
     handler = logging.StreamHandler()
     formatter = logging.Formatter("%(asctime)s - %(name)s - %(message)s")
     handler.setFormatter(formatter)
-    logger.addHandler(handler)
+    if len(logger.handlers) == 0:
+        logger.addHandler(handler)
     return logger
