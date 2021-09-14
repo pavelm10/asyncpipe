@@ -54,19 +54,14 @@ class TaskD(TaskBase):
 class DiamondPipeline(Pipeline):
 
     def define(self) -> List:
-        tasks = []
         d_task = TaskD(idx=111)
         branch_tasks = []
         for idx in range(10):
             a_task = TaskA(idx=idx, dependency=[d_task])
             b_task = TaskB(idx=idx, dependency=[a_task])
-            branch_tasks.append(a_task)
             branch_tasks.append(b_task)
         c_task = TaskC(idx=666, dependency=branch_tasks)
-        tasks.append(d_task)
-        tasks.extend(branch_tasks)
-        tasks.append(c_task)
-        return tasks
+        return [c_task]
 
 
 if __name__ == "__main__":

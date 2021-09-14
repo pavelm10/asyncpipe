@@ -42,10 +42,12 @@ class Pipeline(ABC):
         if failed:
             raise TasksFailedError("There was at least one failed task in the pipeline")
 
-    def _init_tasks(self, semaphore: asyncio.Semaphore, tasks: Set) -> List:
+    def _init_tasks(self) -> List:
         """initializes all the tasks: sets semaphore, root output dir, checks which tasks are done"""
         tasks_complete = []
-        for t in tasks:
+        semaphore = asyncio.Semaphore(self.workers)
+        self.log.info(f"Semaphore initialized with {self.workers} workers")
+        for t in self.tasks:
             t.semaphore = semaphore
             t.root_out_dir = self.root_output_dir
             t.remove_soft_failure_flag()
@@ -56,14 +58,11 @@ class Pipeline(ABC):
         """
         main async execution method which wraps pipeline definition, tasks' initialization and actual task triggering
         """
-        semaphore = asyncio.Semaphore(self.workers)
-        self.log.info(f"Semaphore initialized with {self.workers} workers")
-
         tasks = self.define()
         self._traverse_the_graph(tasks)
         self.log.info(f"There are {len(self.tasks)} tasks in the pipeline")
 
-        tasks_complete = self._init_tasks(semaphore, self.tasks)
+        tasks_complete = self._init_tasks()
         if all(tasks_complete):
             self.log.info("Nothing to run, all tasks are complete")
             return

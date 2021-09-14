@@ -26,7 +26,7 @@ class TaskBase(Task):
         return od
 
     async def run_task(self) -> None:
-        await asyncio.sleep(random.randint(1, 5))
+        await asyncio.sleep(random.randint(1, 3))
 
 
 class TaskTroubleMaker(TaskBase):
