@@ -40,6 +40,10 @@ class TaskTroubleMaker(TaskBase):
             raise DummyException("I was told to fail, so I did")
 
 
+class TaskA(TaskBase):
+    pass
+
+
 class TaskB(TaskBase):
     pass
 
@@ -61,7 +65,6 @@ class DummyPipeline(Pipeline):
         self.propagate_soft_failures = pass_soft_fail
 
     def define(self) -> List:
-        all_tasks = []
         branching_stage_tasks = []
         evt = asyncio.Event()
         if self.set_evt:
@@ -70,13 +73,21 @@ class DummyPipeline(Pipeline):
         for idx in range(0, 10):
             ctask = TaskC(idx=idx, dependency=[btask])
             problem_task = TaskTroubleMaker(evt=evt, idx=idx, dependency=[ctask], fail_softly=self.fail_softly)
-            branching_stage_tasks.extend([problem_task, ctask])
+            branching_stage_tasks.append(problem_task)
 
         dtask = TaskD(idx=42, dependency=branching_stage_tasks, propagate_soft_failures=self.propagate_soft_failures)
-        all_tasks.append(btask)
-        all_tasks.extend(branching_stage_tasks)
-        all_tasks.append(dtask)
-        return all_tasks
+        return [dtask]
+
+
+class BranchingPipeline(Pipeline):
+
+    def define(self) -> List:
+        atask = TaskA(idx=0)
+        btask = TaskB(idx=1, dependency=[atask])
+        ctask = TaskC(idx=2, dependency=[btask])
+        problem_task = TaskTroubleMaker(idx=3, dependency=[btask], evt=asyncio.Event())
+        dtask = TaskD(idx=4, dependency=[ctask, problem_task])
+        return [dtask]
 
 
 @pytest.mark.parametrize("workers", (10, 20))
@@ -120,3 +131,10 @@ def test_pipeline_rerun_with_soft_failures_and_propagating(tmp_path, pass_soft_f
     pipe.run()
     files = list(tmp_path.rglob("done.json"))
     assert len(files) == 22
+
+
+def test_branching_pipeline(tmp_path):
+    pipe = BranchingPipeline(root_output_dir=tmp_path)
+    pipe.run()
+    files = list(tmp_path.rglob("done.json"))
+    assert len(files) == 5

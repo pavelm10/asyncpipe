@@ -1,9 +1,9 @@
 import asyncio
 from abc import ABC, abstractmethod
 import pathlib
-from typing import List
+from typing import List, Set
 from utils import init_logger
-from task import TaskState
+from task import TaskState, Task
 
 
 class Pipeline(ABC):
@@ -18,6 +18,7 @@ class Pipeline(ABC):
         self.workers = workers
         self.log = init_logger(self.__class__.__name__)
         self.task_results = {}
+        self.tasks = set()
 
     @abstractmethod
     def define(self) -> List:
@@ -41,7 +42,7 @@ class Pipeline(ABC):
         if failed:
             raise TasksFailedError("There was at least one failed task in the pipeline")
 
-    def _init_tasks(self, semaphore: asyncio.Semaphore, tasks: List) -> List:
+    def _init_tasks(self, semaphore: asyncio.Semaphore, tasks: Set) -> List:
         """initializes all the tasks: sets semaphore, root output dir, checks which tasks are done"""
         tasks_complete = []
         for t in tasks:
@@ -59,15 +60,16 @@ class Pipeline(ABC):
         self.log.info(f"Semaphore initialized with {self.workers} workers")
 
         tasks = self.define()
-        self.log.info(f"There are {len(tasks)} tasks in the pipeline")
+        self._traverse_the_graph(tasks)
+        self.log.info(f"There are {len(self.tasks)} tasks in the pipeline")
 
-        tasks_complete = self._init_tasks(semaphore, tasks)
+        tasks_complete = self._init_tasks(semaphore, self.tasks)
         if all(tasks_complete):
             self.log.info("Nothing to run, all tasks are complete")
             return
 
         self.log.info("Launching tasks...")
-        atasks = [asyncio.create_task(t.execute(), name=t.name) for t in tasks]
+        atasks = [asyncio.create_task(t.execute(), name=t.name) for t in self.tasks]
 
         for t in atasks:
             name, state = await t
@@ -78,6 +80,16 @@ class Pipeline(ABC):
     def run(self):
         """interface method to wrap calling of the execute method"""
         asyncio.run(self._execute())
+
+    def _traverse_the_graph(self, tasks: List[Task]) -> None:
+        """
+        from the most downstream tasks traverse the dependencies tree to obtain all tasks
+        :param tasks: (List[Task]) list of the most downstream tasks
+        """
+        for t in tasks:
+            self.tasks.add(t)
+            if len(t.dependency) > 0:
+                self._traverse_the_graph(t.dependency)
 
 
 class PipelineError(Exception):
