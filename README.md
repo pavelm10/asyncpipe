@@ -43,24 +43,14 @@ marked `DONE` else it will be `FAILED`.
 When the pipeline is to be rerun the soft failures flags are deleted during initialization phase 
 so that the rerun of `FAILED SOFTLY` tasks can happen.
 
-## Build environment
-Either run inside newly created and activated virtual environment:
+## Build
 ```
-pip install -r reqs.txt
-```
-or on linux:
-```
-./build_venv.sh
+poetry install
 ```
 
 ## Unit tests
-To run basic unit tests run (on linux):
 ```
-./run_test.sh
-```
-or just in activated virtual environment:
-```
-pytest test.py
+poetry run pytest tests/
 ```
 
 ## Examples

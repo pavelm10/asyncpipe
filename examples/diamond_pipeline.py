@@ -3,8 +3,8 @@ import pathlib
 from typing import List, Dict
 import random
 
-from pipeline import Pipeline
-from task import Task
+from asyncpipe.pipeline import Pipeline
+from asyncpipe.task import Task
 
 
 class TaskBase(Task):

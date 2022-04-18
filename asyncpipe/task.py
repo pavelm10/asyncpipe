@@ -6,7 +6,7 @@ from typing import Dict, List, Tuple
 
 import aiofiles
 
-from utils import init_logger
+from asyncpipe.utils import init_logger
 
 
 class TaskState:

@@ -3,8 +3,8 @@ import random
 from typing import List, Dict
 import pytest
 
-from pipeline import Pipeline, TasksFailedError
-from task import Task
+from asyncpipe.pipeline import Pipeline, TasksFailedError
+from asyncpipe.task import Task
 
 
 class DummyException(Exception):

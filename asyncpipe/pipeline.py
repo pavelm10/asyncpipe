@@ -2,8 +2,8 @@ import asyncio
 from abc import ABC, abstractmethod
 import pathlib
 from typing import List, Set
-from utils import init_logger
-from task import TaskState, Task
+from asyncpipe.utils import init_logger
+from asyncpipe.task import TaskState, Task
 
 
 class Pipeline(ABC):
