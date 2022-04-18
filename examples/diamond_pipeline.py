@@ -14,7 +14,7 @@ class TaskBase(Task):
 
     @property
     def name(self) -> str:
-        return f"{self.__class__.__name__}_{self.idx}"
+        return f'{self.__class__.__name__}_{self.idx}'
 
     def output_data(self) -> Dict:
         od = super().output_data()
@@ -22,7 +22,7 @@ class TaskBase(Task):
         return od
 
     async def run_task(self) -> None:
-        self.log.info(f"running with ID: {self.idx}")
+        self.log.info('running with ID: %s', self.idx)
         await asyncio.sleep(random.randint(1, 5))
 
 
@@ -35,24 +35,21 @@ class TaskB(TaskBase):
 
 
 class TaskC(TaskBase):
-
     async def run_task(self) -> None:
-        self.log.info(f"running with ID: {self.idx}")
-        files = sorted(self.root_out_dir.rglob("*.json"))
+        self.log.info('running with ID: %s', self.idx)
+        files = sorted(self.root_out_dir.rglob('*.json'))
         for f in files:
             self.log.info(f)
 
 
 class TaskD(TaskBase):
-
     async def run_task(self) -> None:
-        self.log.info(f"running with ID: {self.idx}")
-        self.log.info("Just starting, doing nothing interesting")
+        self.log.info('running with ID: %s', self.idx)
+        self.log.info('Just starting, doing nothing interesting')
         await asyncio.sleep(random.randint(1, 5))
 
 
 class DiamondPipeline(Pipeline):
-
     def define(self) -> List:
         d_task = TaskD(idx=111)
         branch_tasks = []
@@ -64,17 +61,25 @@ class DiamondPipeline(Pipeline):
         return [c_task]
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     import argparse
     import shutil
 
     argp = argparse.ArgumentParser()
-    argp.add_argument('-o', '--out-dir', help='path to the output directory', required=False)
-    argp.add_argument('-w', '--workers', help='number of concurrent workers', type=int, default=5)
+    argp.add_argument(
+        '-o', '--out-dir', help='path to the output directory', required=False
+    )
+    argp.add_argument(
+        '-w',
+        '--workers',
+        help='number of concurrent workers',
+        type=int,
+        default=5,
+    )
 
     pargs = argp.parse_args()
     if pargs.out_dir is None:
-        out = pathlib.Path("./test_out")
+        out = pathlib.Path('./test_out')
     else:
         out = pathlib.Path(pargs.out_dir)
     if out.exists():

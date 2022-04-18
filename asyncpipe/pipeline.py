@@ -1,18 +1,22 @@
 import asyncio
 from abc import ABC, abstractmethod
 import pathlib
-from typing import List, Set
+from typing import List
+
 from asyncpipe.utils import init_logger
 from asyncpipe.task import TaskState, Task
 
 
 class Pipeline(ABC):
-    """Defines the actual pipeline structure, what tasks shall run in which order and what are the dependencies"""
+    """Defines the actual pipeline structure, what tasks shall run in which
+    order and what are the dependencies"""
 
     def __init__(self, root_output_dir: pathlib.Path, workers: int = 1):
         """
-        :param root_output_dir: (pathlib.Path) the root directory where all the tasks' subdirectories are located
-        :param workers: (optional, int) number of concurrent tasks to run, defaults to 1
+        :param root_output_dir: (pathlib.Path) the root directory where all
+            the tasks' subdirectories are located
+        :param workers: (optional, int) number of concurrent tasks to run,
+            defaults to 1
         """
         self.root_output_dir = root_output_dir
         self.workers = workers
@@ -22,14 +26,16 @@ class Pipeline(ABC):
 
     @abstractmethod
     def define(self) -> List:
-        """main method for defining the pipeline structure, must be implemented by a subclass"""
+        """Main method for defining the pipeline structure,
+        must be implemented by a subclass"""
         return []
 
     def _handle_results(self) -> None:
-        """prints tasks' results if there is any failed task will raise eventually TasksFailedError"""
+        """Prints tasks' results if there is any failed task will raise
+        eventually TasksFailedError"""
         failed = False
         for t_name, t_state in self.task_results.items():
-            msg = f"{t_name}: {t_state}"
+            msg = '%s: %s', t_name, t_state
             if t_state == TaskState.FAILED:
                 failed = True
                 func = self.log.error
@@ -40,13 +46,16 @@ class Pipeline(ABC):
             func(msg)
 
         if failed:
-            raise TasksFailedError("There was at least one failed task in the pipeline")
+            raise TasksFailedError(
+                'There was at least one failed task in the pipeline'
+            )
 
     def _init_tasks(self) -> List:
-        """initializes all the tasks: sets semaphore, root output dir, checks which tasks are done"""
+        """initializes all the tasks: sets semaphore, root output dir,
+        checks which tasks are done"""
         tasks_complete = []
         semaphore = asyncio.Semaphore(self.workers)
-        self.log.info(f"Semaphore initialized with {self.workers} workers")
+        self.log.info('Semaphore initialized with %d workers', self.workers)
         for t in self.tasks:
             t.semaphore = semaphore
             t.root_out_dir = self.root_output_dir
@@ -56,19 +65,22 @@ class Pipeline(ABC):
 
     async def _execute(self):
         """
-        main async execution method which wraps pipeline definition, tasks' initialization and actual task triggering
+        Main async execution method which wraps pipeline definition,
+        tasks' initialization and actual task triggering
         """
         tasks = self.define()
         self._traverse_the_graph(tasks)
-        self.log.info(f"There are {len(self.tasks)} tasks in the pipeline")
+        self.log.info('"There are %d tasks in the pipeline', len(self.tasks))
 
         tasks_complete = self._init_tasks()
         if all(tasks_complete):
-            self.log.info("Nothing to run, all tasks are complete")
+            self.log.info('Nothing to run, all tasks are complete')
             return
 
-        self.log.info("Launching tasks...")
-        atasks = [asyncio.create_task(t.execute(), name=t.name) for t in self.tasks]
+        self.log.info('Launching tasks...')
+        atasks = [
+            asyncio.create_task(t.execute(), name=t.name) for t in self.tasks
+        ]
 
         for t in atasks:
             name, state = await t
@@ -82,7 +94,9 @@ class Pipeline(ABC):
 
     def _traverse_the_graph(self, tasks: List[Task]) -> None:
         """
-        from the most downstream tasks traverse the dependencies tree to obtain all tasks
+        From the most downstream tasks traverse the dependencies tree to
+        obtain all tasks.
+
         :param tasks: (List[Task]) list of the most downstream tasks
         """
         for t in tasks:
@@ -92,9 +106,8 @@ class Pipeline(ABC):
 
 
 class PipelineError(Exception):
-    pass
+    """Generic Exception to be overriden"""
 
 
 class TasksFailedError(PipelineError):
     """raise when at least one task failed in the pipeline"""
-    pass
