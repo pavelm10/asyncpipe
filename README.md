@@ -71,5 +71,5 @@ and pipelines.
  * No checks for cyclic graphs are made - user's responsibility to define the pipeline 
 as an acyclic graph.
  * Multiple outputs from a task are not supported, currently the output is only one file flag.
- * More civilized abortion of the pipeline is not implemented, yet.
+ * More civilized abortion of the pipeline is not implemented.
  * ...
