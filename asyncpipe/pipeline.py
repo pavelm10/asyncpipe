@@ -6,6 +6,8 @@ from typing import List
 from asyncpipe.utils import init_logger
 from asyncpipe.task import TaskState, Task
 
+_LOGGER = init_logger(__name__)
+
 
 class Pipeline(ABC):
     """Defines the actual pipeline structure, what tasks shall run in which
@@ -20,7 +22,6 @@ class Pipeline(ABC):
         """
         self.root_output_dir = root_output_dir
         self.workers = workers
-        self.log = init_logger(self.__class__.__name__)
         self.task_results = {}
         self.tasks = set()
 
@@ -38,11 +39,11 @@ class Pipeline(ABC):
             msg = '%s: %s', t_name, t_state
             if t_state == TaskState.FAILED:
                 failed = True
-                func = self.log.error
+                func = _LOGGER.error
             elif t_state == TaskState.DONE:
-                func = self.log.info
+                func = _LOGGER.info
             else:
-                func = self.log.warning
+                func = _LOGGER.warning
             func(msg)
 
         if failed:
@@ -55,7 +56,7 @@ class Pipeline(ABC):
         checks which tasks are done"""
         tasks_complete = []
         semaphore = asyncio.Semaphore(self.workers)
-        self.log.info('Semaphore initialized with %d workers', self.workers)
+        _LOGGER.info('Semaphore initialized with %d workers', self.workers)
         for t in self.tasks:
             t.semaphore = semaphore
             t.root_out_dir = self.root_output_dir
@@ -70,14 +71,14 @@ class Pipeline(ABC):
         """
         tasks = self.define()
         self._traverse_the_graph(tasks)
-        self.log.info('"There are %d tasks in the pipeline', len(self.tasks))
+        _LOGGER.info('There are %d tasks in the pipeline', len(self.tasks))
 
         tasks_complete = self._init_tasks()
         if all(tasks_complete):
-            self.log.info('Nothing to run, all tasks are complete')
+            _LOGGER.info('Nothing to run, all tasks are complete')
             return
 
-        self.log.info('Launching tasks...')
+        _LOGGER.info('Launching tasks...')
         atasks = [
             asyncio.create_task(t.execute(), name=t.name) for t in self.tasks
         ]

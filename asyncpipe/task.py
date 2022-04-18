@@ -8,6 +8,8 @@ import aiofiles
 
 from asyncpipe.utils import init_logger
 
+_LOGGER = init_logger(__name__)
+
 
 class TaskState:
     """definition of possible task's states"""
@@ -58,7 +60,6 @@ class Task(ABC):
         self._semaphore = None
         self._root_out_dir = None
         self._state = TaskState.PENDING
-        self.log = init_logger(self.name)
 
     @property
     def name(self) -> str:
@@ -107,6 +108,21 @@ class Task(ABC):
         """root output directory setter"""
         self._root_out_dir = the_out_dir
 
+    def _format_log_message(self, message) -> str:
+        return '%s - %s', self.name, message
+
+    def log_info(self, message: str):
+        _LOGGER.info(self._format_log_message(message))
+
+    def log_error(self, message: str):
+        _LOGGER.error(self._format_log_message(message))
+
+    def log_exception(self, message: str):
+        _LOGGER.exception(self._format_log_message(message))
+
+    def log_warning(self, message: str):
+        _LOGGER.warning(self._format_log_message(message))
+
     def done(self) -> bool:
         """
         if the task's done file flag exists returns True, else False,
@@ -128,13 +144,13 @@ class Task(ABC):
         if self.failed_softly():
             self.soft_failure_output.unlink()
 
-    def output_data(self) -> Dict:
+    def output_data(self) -> Dict[str, str]:
         """
         output dictionary that will be stored in the task's done flag,
         can be overridden/extended by a subclass
         :return: (Dict)
         """
-        return {"task_name": self.__class__.__name__}
+        return {'task_name': self.__class__.__name__}
 
     async def create_soft_failure_output(self) -> None:
         """
@@ -143,7 +159,7 @@ class Task(ABC):
         :return:
         """
         await self._write_output(self.soft_failure_output)
-        self.log.info("soft failure output created")
+        self.log_info('soft failure output created')
 
     async def create_output(self) -> None:
         """
@@ -152,7 +168,7 @@ class Task(ABC):
         :return:
         """
         await self._write_output(self.output)
-        self.log.info("output created")
+        self.log_info('output created')
 
     async def _write_output(self, out_path) -> None:
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -173,13 +189,13 @@ class Task(ABC):
         and creates task's output file flag"""
         await self.semaphore.acquire()
         try:
-            self.log.info("semaphore acquired")
+            self.log_info('semaphore acquired')
             await self.run_task()
             self._state = TaskState.DONE
             await self.create_output()
-            self.log.info("executed")
+            self.log_info('executed')
         except BaseException as exc:
-            self.log.exception(exc)
+            self.log_exception(exc)
             self._state = (
                 TaskState.FAILED_SOFTLY
                 if self.fail_softly
@@ -189,15 +205,15 @@ class Task(ABC):
                 await self.create_soft_failure_output()
         finally:
             self.semaphore.release()
-            self.log.info("semaphore released")
+            self.log_info('semaphore released')
 
-    def _dependencies_done(self):
+    def _dependencies_done(self) -> bool:
         """checks if all dependencies are done, if yes then returns True,
         else False"""
         states = [d.done() for d in self.dependency]
         return all(states)
 
-    def _dependencies_failed_softly(self):
+    def _dependencies_failed_softly(self) -> bool:
         """checks if any dependency failed softly, if yes then returns True,
         else False"""
         states = [d.failed_softly() for d in self.dependency]
@@ -215,41 +231,41 @@ class Task(ABC):
         True else False"""
         ret = True
         if self._dependencies_done():
-            self.log.info('dependencies done')
+            self.log_info('dependencies done')
         else:
-            self.log.info('dependencies not done, waiting...')
+            self.log_info('dependencies not done, waiting...')
             await self._wait_for_dependencies()
             if self._dependencies_failed_softly():
-                self.log.warning('At least one dependency failed softly')
+                self.log_warning('At least one dependency failed softly')
                 ret = not self.propagate_soft_failures
                 if not ret:
-                    self.log.warning(
+                    self.log_warning(
                         'Propagating soft failures - soft failing as well'
                     )
                     self._state = TaskState.FAILED_SOFTLY
                     await self.create_soft_failure_output()
             elif not self._dependencies_done():
-                self.log.error('Not all dependencies are done - skipping')
+                self.log_error('Not all dependencies are done - skipping')
                 self._state = TaskState.FAILED_DEPENDENCY
                 ret = False
             else:
-                self.log.info(
+                self.log_info(
                     'dependencies finally are done, starting execution...'
                 )
 
         return ret
 
-    async def execute(self) -> Tuple:
+    async def execute(self) -> Tuple[str, str]:
         """
         main async method for resolving if the task shall run, handles
         dependencies and executes the task
         :return: (Tuple) task's name, task's state
         """
         if self.done():
-            self.log.info('already done - skipping')
+            self.log_info('already done - skipping')
             self._state = TaskState.DONE
         else:
-            self.log.info('not complete')
+            self.log_info('not complete')
             run = True
             if len(self.dependency) > 0:
                 run = await self._handle_dependencies()
@@ -257,5 +273,5 @@ class Task(ABC):
             if run:
                 await self._execute()
         self.event.set()
-        self.log.info('event set')
+        self.log_info('event set')
         return self.name, self._state
