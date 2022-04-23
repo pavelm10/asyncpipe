@@ -10,6 +10,10 @@ concurrently several processing tasks. It handles failures of dependent tasks an
 execution of the down stream tasks. Rerunning the pipeline is supported and only 
 failed/unfinished tasks are executed, provided their dependencies are done.
 
+### Cycle Detection
+Before the pipeline runs it performs a cycle detection in case the user defined
+cyclic dependencies.
+
 ### Soft Failures
 If task's parameter `fail_softly` is set True and the task raises exception than the state will be 
 `FAILED SOFTLY` allowing downstream tasks to execute. It is useful when the pipeline contains many branches 
@@ -58,8 +62,6 @@ In the folder `examples` are scripts for getting the understanding how to define
 and pipelines.
 
 ## Technical Debt
- * No checks for cyclic graphs are made - user's responsibility to define the pipeline 
-as an acyclic graph.
  * Multiple outputs from a task are not supported, currently the output is only one file flag.
  * More civilized abortion of the pipeline is not implemented.
  * ...

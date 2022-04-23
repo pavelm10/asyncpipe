@@ -3,7 +3,7 @@ import random
 from typing import List, Dict
 import pytest
 
-from asyncpipe.pipeline import Pipeline, TasksFailedError
+from asyncpipe.pipeline import Pipeline, TasksFailedError, CyclicPipelineError
 from asyncpipe.task import Task
 
 
@@ -106,6 +106,27 @@ class BranchingPipeline(Pipeline):
         return [dtask]
 
 
+class SimpleCyclicPipeline(Pipeline):
+    def define(self) -> List:
+        atask = TaskA(idx=0)
+        btask = TaskB(idx=1, dependency=atask)
+        atask.dependency = [btask]
+        return [btask]
+
+
+class ComplexCyclicPipeline(Pipeline):
+    def define(self) -> List:
+        atask = TaskA(idx=0)
+        btask = TaskB(idx=1, dependency=atask)
+        ctask = TaskC(idx=2, dependency=btask)
+        problem_task = TaskTroubleMaker(
+            idx=3, dependency=btask, evt=asyncio.Event()
+        )
+        dtask = TaskD(idx=4, dependency=[ctask, problem_task])
+        atask.dependency = [dtask]
+        return [dtask]
+
+
 @pytest.mark.parametrize("workers", (10, 20))
 def test_pipeline_success(workers, tmp_path):
     pipe = DummyPipeline(root_output_dir=tmp_path, workers=workers)
@@ -161,3 +182,12 @@ def test_branching_pipeline(tmp_path):
     pipe.run()
     files = list(tmp_path.rglob('done.json'))
     assert len(files) == 5
+
+
+@pytest.mark.parametrize(
+    'pipeline', (SimpleCyclicPipeline, ComplexCyclicPipeline)
+)
+def test_cycle_detction(pipeline, tmp_path):
+    pipe = pipeline(root_output_dir=tmp_path)
+    with pytest.raises(CyclicPipelineError):
+        pipe.run()
