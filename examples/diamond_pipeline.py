@@ -17,12 +17,12 @@ class TaskBase(Task):
         return f'{self.__class__.__name__}_{self.idx}'
 
     def output_data(self) -> Dict:
-        od = super().output_data()
-        od['task_id'] = self.idx
-        return od
+        data = super().output_data()
+        data['task_id'] = self.idx
+        return data
 
     async def run_task(self) -> None:
-        self.log.info('running with ID: %s', self.idx)
+        self.log_info((f'running with ID: {self.idx}'))
         await asyncio.sleep(random.randint(1, 5))
 
 
@@ -36,16 +36,16 @@ class TaskB(TaskBase):
 
 class TaskC(TaskBase):
     async def run_task(self) -> None:
-        self.log.info('running with ID: %s', self.idx)
+        self.log_info((f'running with ID: {self.idx}'))
         files = sorted(self.root_out_dir.rglob('*.json'))
-        for f in files:
-            self.log.info(f)
+        for file in files:
+            self.log_info(file)
 
 
 class TaskD(TaskBase):
     async def run_task(self) -> None:
-        self.log.info('running with ID: %s', self.idx)
-        self.log.info('Just starting, doing nothing interesting')
+        self.log_info((f'running with ID: {self.idx}'))
+        self.log_info('Just starting, doing nothing interesting')
         await asyncio.sleep(random.randint(1, 5))
 
 

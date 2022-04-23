@@ -36,7 +36,7 @@ class Pipeline(ABC):
         eventually TasksFailedError"""
         failed = False
         for t_name, t_state in self.task_results.items():
-            msg = '%s: %s', t_name, t_state
+            msg = f'{t_name}: {t_state}'
             if t_state == TaskState.FAILED:
                 failed = True
                 func = _LOGGER.error

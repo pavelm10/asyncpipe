@@ -109,7 +109,7 @@ class Task(ABC):
         self._root_out_dir = the_out_dir
 
     def _format_log_message(self, message) -> str:
-        return '%s - %s', self.name, message
+        return f'{self.name} - {message}'
 
     def log_info(self, message: str):
         _LOGGER.info(self._format_log_message(message))
