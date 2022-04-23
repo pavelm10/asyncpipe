@@ -26,7 +26,7 @@ class Pipeline(ABC):
         self.tasks = set()
 
     @abstractmethod
-    def define(self) -> List:
+    def define(self) -> List[Task]:
         """Main method for defining the pipeline structure,
         must be implemented by a subclass"""
         return []
@@ -51,7 +51,7 @@ class Pipeline(ABC):
                 'There was at least one failed task in the pipeline'
             )
 
-    def _init_tasks(self) -> List:
+    def _init_tasks(self) -> List[bool]:
         """initializes all the tasks: sets semaphore, root output dir,
         checks which tasks are done"""
         tasks_complete = []
@@ -94,7 +94,7 @@ class Pipeline(ABC):
         asyncio.run(self._execute())
 
     def _traverse_the_graph(
-        self, tasks: List[Task], rec_stack: Optional[List] = None
+        self, tasks: List[Task], rec_stack: Optional[List[Task]] = None
     ) -> None:
         """
         From the most downstream tasks traverse the dependencies tree to

@@ -170,7 +170,7 @@ class Task(ABC):
         await self._write_output(self.output)
         self.log_info('output created')
 
-    async def _write_output(self, out_path) -> None:
+    async def _write_output(self, out_path: pathlib.Path) -> None:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         data = self.output_data()
         data['state'] = self._state
