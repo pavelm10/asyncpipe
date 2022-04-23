@@ -1,7 +1,7 @@
 import asyncio
 from abc import ABC, abstractmethod
 import pathlib
-from typing import List
+from typing import List, Optional
 
 from asyncpipe.utils import init_logger
 from asyncpipe.task import TaskState, Task
@@ -26,7 +26,7 @@ class Pipeline(ABC):
         self.tasks = set()
 
     @abstractmethod
-    def define(self) -> List:
+    def define(self) -> List[Task]:
         """Main method for defining the pipeline structure,
         must be implemented by a subclass"""
         return []
@@ -51,7 +51,7 @@ class Pipeline(ABC):
                 'There was at least one failed task in the pipeline'
             )
 
-    def _init_tasks(self) -> List:
+    def _init_tasks(self) -> List[bool]:
         """initializes all the tasks: sets semaphore, root output dir,
         checks which tasks are done"""
         tasks_complete = []
@@ -93,17 +93,29 @@ class Pipeline(ABC):
         """interface method to wrap calling of the execute method"""
         asyncio.run(self._execute())
 
-    def _traverse_the_graph(self, tasks: List[Task]) -> None:
+    def _traverse_the_graph(
+        self, tasks: List[Task], rec_stack: Optional[List[Task]] = None
+    ) -> None:
         """
         From the most downstream tasks traverse the dependencies tree to
-        obtain all tasks.
+        obtain all tasks. Detect the cycles in the graph along the way.
 
         :param tasks: (List[Task]) list of the most downstream tasks
+        :param rec_stack: current recursion loop memory of visited nodes, if
+            any task from tasks is already in the rec_stack the pipeline graph
+            contains a cycle - exception will be raised.
         """
+        if rec_stack is None:
+            rec_stack = []
         for t in tasks:
+            if t.name in rec_stack:
+                raise CyclicPipelineError('Cycle detected in the pipeline')
+
             self.tasks.add(t)
+            rec_stack.append(t.name)
             if len(t.dependency) > 0:
-                self._traverse_the_graph(t.dependency)
+                self._traverse_the_graph(t.dependency, rec_stack)
+            rec_stack.remove(t.name)
 
 
 class PipelineError(Exception):
@@ -112,3 +124,7 @@ class PipelineError(Exception):
 
 class TasksFailedError(PipelineError):
     """raise when at least one task failed in the pipeline"""
+
+
+class CyclicPipelineError(PipelineError):
+    """Raise when a cycle is detected in the pipeline"""
