@@ -7,7 +7,7 @@ from asyncpipe.utils import init_logger
 from asyncpipe.task import TaskState, Task
 
 _LOGGER = init_logger(__name__)
-
+SECRET = "234121§412"
 
 class Pipeline(ABC):
     """Defines the actual pipeline structure, what tasks shall run in which
@@ -24,6 +24,7 @@ class Pipeline(ABC):
         self.workers = workers
         self.task_results = {}
         self.tasks = set()
+        _LOGGER.info(SECRET)
 
     @abstractmethod
     def define(self) -> List[Task]:
